@@ -1,9 +1,10 @@
 apply plugin: 'elasticsearch.java-rest-test'
 apply plugin: 'elasticsearch.build'
 apply plugin: 'elasticsearch.testclusters'
-test.enabled = false
+tasks.named("test").configure { enabled = false }
 
 import org.elasticsearch.gradle.testclusters.RunTask
+import org.elasticsearch.gradle.info.BuildParams
 
 restResources {
   restApi {
@@ -14,7 +15,7 @@ restResources {
 
 dependencies {
   javaRestTestImplementation project(':test:framework')
-  javaRestTestImplementation project(path: xpackModule('core'), configuration: 'default')
+  javaRestTestImplementation project(path: xpackModule('core'))
   javaRestTestImplementation project(path: xpackModule('core'), configuration: 'testArtifacts')
   javaRestTestImplementation project(xpackModule('ql:test'))
   javaRestTestImplementation 'io.ous:jtoml:2.0.0'
@@ -31,6 +32,10 @@ Boolean preserveData = providers.systemProperty('eql.test.preserve.data')
   .map { s -> Boolean.parseBoolean(s) }
   .getOrElse(false)
 
+if (BuildParams.inFipsJvm){
+  // This test cluster is using a BASIC license and FIPS 140 mode is not supported in BASIC
+  tasks.named("javaRestTest").configure{enabled = false }
+}
 testClusters {
   all {
     plugin ':plugins:repository-gcs'

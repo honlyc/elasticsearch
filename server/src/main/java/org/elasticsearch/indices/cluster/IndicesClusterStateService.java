@@ -1,20 +1,9 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
  */
 
 package org.elasticsearch.indices.cluster;
@@ -63,6 +52,7 @@ import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.IndexShardClosedException;
 import org.elasticsearch.index.shard.IndexShardRelocatedException;
 import org.elasticsearch.index.shard.IndexShardState;
+import org.elasticsearch.index.shard.ShardLongFieldRange;
 import org.elasticsearch.index.shard.PrimaryReplicaSyncer;
 import org.elasticsearch.index.shard.PrimaryReplicaSyncer.ResyncTask;
 import org.elasticsearch.index.shard.ShardId;
@@ -208,7 +198,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
 
     @Override
     public synchronized void applyClusterState(final ClusterChangedEvent event) {
-        if (!lifecycle.started()) {
+        if (lifecycle.started() == false) {
             return;
         }
 
@@ -520,7 +510,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
     }
 
     private void updateIndices(ClusterChangedEvent event) {
-        if (!event.metadataChanged()) {
+        if (event.metadataChanged() == false) {
             return;
         }
         final ClusterState state = event.state();
@@ -649,9 +639,14 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
                     shardRouting.shardId(), state, nodes.getMasterNode());
             }
             if (nodes.getMasterNode() != null) {
-                shardStateAction.shardStarted(shardRouting, primaryTerm, "master " + nodes.getMasterNode() +
-                        " marked shard as initializing, but shard state is [" + state + "], mark shard as started",
-                    SHARD_STATE_ACTION_LISTENER, clusterState);
+                shardStateAction.shardStarted(
+                        shardRouting,
+                        primaryTerm,
+                        "master " + nodes.getMasterNode() + " marked shard as initializing, but shard state is [" + state +
+                                "], mark shard as started",
+                        shard.getTimestampRange(),
+                        SHARD_STATE_ACTION_LISTENER,
+                        clusterState);
             }
         }
     }
@@ -663,7 +658,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
     private static DiscoveryNode findSourceNodeForPeerRecovery(Logger logger, RoutingTable routingTable, DiscoveryNodes nodes,
                                                                ShardRouting shardRouting) {
         DiscoveryNode sourceNode = null;
-        if (!shardRouting.primary()) {
+        if (shardRouting.primary() == false) {
             ShardRouting primary = routingTable.shardRoutingTable(shardRouting.shardId()).primaryShard();
             // only recover from started primary, if we can't find one, we will do it next round
             if (primary.active()) {
@@ -705,8 +700,13 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
         }
 
         @Override
-        public void onRecoveryDone(final RecoveryState state) {
-            shardStateAction.shardStarted(shardRouting, primaryTerm, "after " + state.getRecoverySource(), SHARD_STATE_ACTION_LISTENER);
+        public void onRecoveryDone(final RecoveryState state, ShardLongFieldRange timestampMillisFieldRange) {
+            shardStateAction.shardStarted(
+                    shardRouting,
+                    primaryTerm,
+                    "after " + state.getRecoverySource(),
+                    timestampMillisFieldRange,
+                    SHARD_STATE_ACTION_LISTENER);
         }
 
         @Override
@@ -797,6 +797,13 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
          * Returns the recovery state associated with this shard.
          */
         RecoveryState recoveryState();
+
+        /**
+         * @return the range of the {@code @timestamp} field for this shard, or {@link ShardLongFieldRange#EMPTY} if this field is not
+         * found, or {@link ShardLongFieldRange#UNKNOWN} if its range is not fixed.
+         */
+        @Nullable
+        ShardLongFieldRange getTimestampRange();
 
         /**
          * Updates the shard state based on an incoming cluster state:
@@ -946,6 +953,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
              * like the shards files, state and transaction logs are kept around in the case of a disaster recovery.
              */
             NO_LONGER_ASSIGNED,
+
             /**
              * The index is deleted. Persistent parts of the index  like the shards files, state and transaction logs are removed once
              * all resources are released.
@@ -970,6 +978,13 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
              * like the shards files, state and transaction logs are kept around in the case of a disaster recovery.
              */
             REOPENED,
+
+            /**
+             * The index is closed as part of the node shutdown process. The index should be removed and all associated resources released.
+             * Persistent parts of the index like the shards files, state and transaction logs should be kept around in the case the node
+             * restarts.
+             */
+            SHUTDOWN,
         }
     }
 }

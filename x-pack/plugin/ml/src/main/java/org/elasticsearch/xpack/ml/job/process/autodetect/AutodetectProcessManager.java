@@ -1,7 +1,8 @@
 /*
  * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Elastic License;
- * you may not use this file except in compliance with the Elastic License.
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0; you may not use this file except in compliance with the Elastic License
+ * 2.0.
  */
 package org.elasticsearch.xpack.ml.job.process.autodetect;
 
@@ -603,7 +604,7 @@ public class AutodetectProcessManager implements ClusterStateListener {
         String jobId = jobTask.getJobId();
         notifyLoadingSnapshot(jobId, autodetectParams);
 
-        if (autodetectParams.dataCounts().getProcessedRecordCount() > 0) {
+        if (autodetectParams.dataCounts().getLatestRecordTimeStamp() != null) {
             if (autodetectParams.modelSnapshot() == null) {
                 String msg = "No model snapshot could be found for a job with processed records";
                 logger.warn("[{}] {}", jobId, msg);
